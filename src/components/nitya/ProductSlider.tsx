@@ -3,8 +3,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { Product, marketplaceLinks } from '@/lib/products';
-import { WhatsAppConfig, defaultWhatsApp, fillTemplate, waLink } from '@/lib/whatsapp';
+import { Product, marketplaceLinks } from '@/lib/productShared';
+import { WhatsAppConfig, defaultWhatsApp, fillTemplate, waLink } from '@/lib/whatsappShared';
 
 export default function ProductSlider() {
   const scrollRef = useRef<HTMLDivElement>(null);

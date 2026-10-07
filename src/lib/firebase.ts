@@ -1,82 +1,8 @@
-// Firebase Realtime Database REST API Helper
-// No SDK needed — just simple fetch calls!
+// Data store for settings + orders.
+// Backed by Postgres (Netlify Database) via ./db, with an in-memory fallback
+// for local dev when DATABASE_URL is not set.
 
-const FIREBASE_URL = process.env.NEXT_PUBLIC_FIREBASE_URL || '';
-
-async function firebaseGet(path: string): Promise<any> {
-  if (!FIREBASE_URL) return null;
-  try {
-    const res = await fetch(`${FIREBASE_URL}/${path}.json`, {
-      next: { revalidate: 0 },
-    });
-    if (res.status === 404) return null;
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data;
-  } catch {
-    return null;
-  }
-}
-
-async function firebasePut(path: string, data: unknown): Promise<any> {
-  if (!FIREBASE_URL) return null;
-  try {
-    const res = await fetch(`${FIREBASE_URL}/${path}.json`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error(`Firebase PUT error: ${res.status}`);
-    return res.json();
-  } catch (error) {
-    console.error('Firebase PUT failed:', error);
-    return null;
-  }
-}
-
-async function firebasePost(path: string, data: unknown): Promise<any> {
-  if (!FIREBASE_URL) return null;
-  try {
-    const res = await fetch(`${FIREBASE_URL}/${path}.json`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error(`Firebase POST error: ${res.status}`);
-    return res.json();
-  } catch (error) {
-    console.error('Firebase POST failed:', error);
-    return null;
-  }
-}
-
-async function firebasePatch(path: string, data: unknown): Promise<any> {
-  if (!FIREBASE_URL) return null;
-  try {
-    const res = await fetch(`${FIREBASE_URL}/${path}.json`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error(`Firebase PATCH error: ${res.status}`);
-    return res.json();
-  } catch (error) {
-    console.error('Firebase PATCH failed:', error);
-    return null;
-  }
-}
-
-async function firebaseDelete(path: string): Promise<boolean> {
-  if (!FIREBASE_URL) return false;
-  try {
-    const res = await fetch(`${FIREBASE_URL}/${path}.json`, {
-      method: 'DELETE',
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
+import { kvGet, kvSet, ordersList, ordersInsert, ordersUpdateStatus, ordersDelete } from './db';
 
 /* ─── Settings ─── */
 
@@ -97,16 +23,13 @@ const defaultSettings: Settings = {
 };
 
 export async function getSettings(): Promise<Settings> {
-  const data = await firebaseGet('settings');
+  const data = await kvGet<Partial<Settings>>('settings');
   if (!data) return defaultSettings;
   return { ...defaultSettings, ...data };
 }
 
 export async function updateSettings(settings: Settings): Promise<Settings> {
-  const result = await firebasePut('settings', settings);
-  if (!result) {
-    console.warn('Firebase not available - settings not saved to cloud');
-  }
+  await kvSet('settings', settings);
   return settings;
 }
 
@@ -125,33 +48,31 @@ export interface Order {
   updatedAt: string;
 }
 
-// In-memory fallback for orders when Firebase is unavailable
+// In-memory fallback for orders when the database is unavailable
 let memoryOrders: Order[] = [];
 
+function toOrder(id: string, val: any, createdAt?: string): Order {
+  return {
+    id,
+    productName: val?.productName || '',
+    customerName: val?.customerName || '',
+    customerPhone: val?.customerPhone || '',
+    quantity: val?.quantity || 1,
+    price: val?.price || 0,
+    status: val?.status || 'pending',
+    source: val?.source || 'whatsapp',
+    createdAt: val?.createdAt || createdAt || new Date().toISOString(),
+    updatedAt: val?.updatedAt || val?.createdAt || createdAt || new Date().toISOString(),
+  };
+}
+
 export async function getOrders(): Promise<{ orders: Order[]; stats: { total: number; pending: number; completed: number } }> {
-  const data = await firebaseGet('orders');
+  const rows = await ordersList();
 
   let orders: Order[];
-
-  if (data && typeof data === 'object') {
-    // Firebase returns { key1: {...}, key2: {...} } format
-    orders = Object.entries(data)
-      .filter(([, val]) => val !== null && typeof val === 'object')
-      .map(([key, val]: [string, any]) => ({
-        id: key,
-        productName: val.productName || '',
-        customerName: val.customerName || '',
-        customerPhone: val.customerPhone || '',
-        quantity: val.quantity || 1,
-        price: val.price || 0,
-        status: val.status || 'pending',
-        source: val.source || 'whatsapp',
-        createdAt: val.createdAt || new Date().toISOString(),
-        updatedAt: val.updatedAt || new Date().toISOString(),
-      }))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  if (rows) {
+    orders = rows.map((r) => toOrder(r.id, r.data, r.createdAt));
   } else {
-    // Fallback to in-memory orders
     orders = memoryOrders;
   }
 
@@ -171,7 +92,8 @@ export async function createOrder(order: {
   source?: string;
 }): Promise<Order> {
   const now = new Date().toISOString();
-  const newOrderData = {
+  const id = 'o_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+  const data = {
     productName: order.productName,
     customerName: order.customerName || '',
     customerPhone: order.customerPhone || '',
@@ -183,28 +105,18 @@ export async function createOrder(order: {
     updatedAt: now,
   };
 
-  const result = await firebasePost('orders', newOrderData);
+  await ordersInsert(id, data);
 
-  let id: string;
-  if (result && result.name) {
-    id = result.name;
-  } else {
-    // Fallback: generate a local ID
-    id = 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-  }
-
-  const newOrder: Order = { id, ...newOrderData };
-
-  // Also store in memory as fallback
+  const newOrder: Order = { id, ...data };
+  // Also keep in memory as fallback
   memoryOrders.unshift(newOrder);
 
   return newOrder;
 }
 
 export async function updateOrderStatus(id: string, status: string): Promise<void> {
-  await firebasePatch(`orders/${id}`, { status, updatedAt: new Date().toISOString() });
+  await ordersUpdateStatus(id, { status, updatedAt: new Date().toISOString() });
 
-  // Update in memory fallback too
   const idx = memoryOrders.findIndex((o) => o.id === id);
   if (idx >= 0) {
     memoryOrders[idx].status = status;
@@ -213,8 +125,6 @@ export async function updateOrderStatus(id: string, status: string): Promise<voi
 }
 
 export async function deleteOrder(id: string): Promise<void> {
-  await firebaseDelete(`orders/${id}`);
-
-  // Remove from memory fallback too
+  await ordersDelete(id);
   memoryOrders = memoryOrders.filter((o) => o.id !== id);
 }

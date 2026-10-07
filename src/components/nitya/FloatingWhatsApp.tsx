@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { WhatsAppConfig, defaultWhatsApp, waLink } from '@/lib/whatsapp';
+import { WhatsAppConfig, defaultWhatsApp, waLink } from '@/lib/whatsappShared';
 
 export default function FloatingWhatsApp() {
   const [config, setConfig] = useState<WhatsAppConfig>(defaultWhatsApp);

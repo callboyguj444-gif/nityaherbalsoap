@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Leaf } from 'lucide-react';
-import { Product } from '@/lib/products';
+import { Product } from '@/lib/productShared';
 
 export default function PriceList() {
   const [priceData, setPriceData] = useState<Product[]>([]);

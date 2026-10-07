@@ -27,8 +27,8 @@ import {
   Image as ImageIcon,
   Send,
 } from 'lucide-react';
-import { Product, defaultProducts } from '@/lib/products';
-import { WhatsAppConfig, defaultWhatsApp, fillTemplate, waLink } from '@/lib/whatsapp';
+import { Product, defaultProducts } from '@/lib/productShared';
+import { WhatsAppConfig, defaultWhatsApp, fillTemplate, waLink } from '@/lib/whatsappShared';
 
 /* ─── Types ─── */
 interface Settings {

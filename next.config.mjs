@@ -10,6 +10,9 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   reactStrictMode: false,
+  experimental: {
+    serverComponentsExternalPackages: ['pg'],
+  },
 };
 
 export default nextConfig;
