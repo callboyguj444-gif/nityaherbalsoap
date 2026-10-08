@@ -6,6 +6,7 @@ import { Pool } from 'pg';
 
 const CONNECTION_STRING =
   process.env.DATABASE_URL ||
+  process.env.NETLIFY_DB_URL ||
   process.env.PGURL ||
   process.env.NETLIFY_DATABASE_URL ||
   '';
